@@ -7,14 +7,11 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# Este "comodín" atrapa cualquier ruta que Vercel mande, evitando el error 404
 @app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
 @app.route('/<path:path>', methods=['POST', 'GET'])
-def procesar_pdf(path):  # <-- Agregamos 'path' aquí para evitar el choque interno
-    
-    # Agregamos esta prueba para saber si el motor está vivo
+def procesar_pdf(path):
     if request.method == 'GET':
-        return jsonify({"status": "El motor de Python está vivo, conectado y esperando tu PDF."}), 200
+        return jsonify({"status": "Activo"}), 200
         
     if 'file' not in request.files:
         return jsonify({'error': 'No se envió ningún archivo'}), 400
@@ -23,13 +20,19 @@ def procesar_pdf(path):  # <-- Agregamos 'path' aquí para evitar el choque inte
     try:
         pdf_bytes = io.BytesIO(file.read())
         filas_datos = []
+        muestra_texto = []
         
         with pdfplumber.open(pdf_bytes) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
                 if not texto: continue
                 
-                for linea in texto.split('\n'):
+                # MODO DETECTIVE: Guardamos una muestra de las líneas para ver dónde pone Binance los datos
+                lineas = texto.split('\n')
+                if not muestra_texto and len(lineas) > 5:
+                    muestra_texto = lineas[4:10] # Tomamos unas líneas de en medio donde están los trades
+                
+                for linea in lineas:
                     partes = linea.split()
                     if len(partes) >= 10 and partes[2] in ['Long', 'Short']:
                         filas_datos.append({
@@ -42,7 +45,8 @@ def procesar_pdf(path):  # <-- Agregamos 'path' aquí para evitar el choque inte
                         })
 
         if not filas_datos:
-            return jsonify({'error': 'No se detectaron operaciones. Verifica que sea el PDF de Binance.'}), 400
+            debug_info = " | ".join(muestra_texto)
+            return jsonify({'error': f'Estructura diferente. El PDF dice: {debug_info}'}), 400
 
         df = pd.DataFrame(filas_datos)
         
