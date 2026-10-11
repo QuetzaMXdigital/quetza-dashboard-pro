@@ -20,20 +20,21 @@ def procesar_pdf(path):
     try:
         pdf_bytes = io.BytesIO(file.read())
         filas_datos = []
-        muestra_texto = []
+        es_order_history = False
         
         with pdfplumber.open(pdf_bytes) as pdf:
             for pagina in pdf.pages:
                 texto = pagina.extract_text()
                 if not texto: continue
                 
-                # MODO DETECTIVE: Guardamos una muestra de las líneas para ver dónde pone Binance los datos
-                lineas = texto.split('\n')
-                if not muestra_texto and len(lineas) > 5:
-                    muestra_texto = lineas[4:10] # Tomamos unas líneas de en medio donde están los trades
-                
-                for linea in lineas:
+                for linea in texto.split('\n'):
                     partes = linea.split()
+                    
+                    # Inteligencia: Detectar si el usuario subió el "Order History" por accidente
+                    if len(partes) >= 6 and (partes[2] == 'BUY' or partes[2] == 'SELL' or partes[6] == 'BUY' or partes[6] == 'SELL'):
+                        es_order_history = True
+                        
+                    # Lectura correcta del "Historial de Posiciones" (Long/Short)
                     if len(partes) >= 10 and partes[2] in ['Long', 'Short']:
                         filas_datos.append({
                             "Símbolo": partes[0],
@@ -44,9 +45,12 @@ def procesar_pdf(path):
                             "Fecha": f"{partes[10]} {partes[11]}" if len(partes) >= 12 else ""
                         })
 
+        # Mensaje amigable si se equivocaron de archivo
+        if es_order_history and not filas_datos:
+            return jsonify({'error': '¡Este es el Historial de Órdenes! Por favor sube el "Historial de Posiciones" o "PNL Realizado" para ver tus ganancias.'}), 400
+
         if not filas_datos:
-            debug_info = " | ".join(muestra_texto)
-            return jsonify({'error': f'Estructura diferente. El PDF dice: {debug_info}'}), 400
+            return jsonify({'error': 'No se detectaron posiciones. Verifica que sea el PDF correcto de Binance.'}), 400
 
         df = pd.DataFrame(filas_datos)
         
