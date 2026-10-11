@@ -7,7 +7,8 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app) 
 
-@app.route('/api/index', methods=['POST'])
+@app.route('/', defaults={'path': ''}, methods=['POST', 'GET'])
+@app.route('/<path:path>', methods=['POST', 'GET'])
 def procesar_pdf():
     if 'file' not in request.files:
         return jsonify({'error': 'No se envió ningún archivo'}), 400
