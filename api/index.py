@@ -30,8 +30,12 @@ def procesar_pdf(path):
                 for linea in texto.split('\n'):
                     partes = linea.split()
                     
-                    # Inteligencia: Detectar si el usuario subió el "Order History" por accidente
-                    if len(partes) >= 6 and (partes[2] == 'BUY' or partes[2] == 'SELL' or partes[6] == 'BUY' or partes[6] == 'SELL'):
+                    # Evitar líneas vacías
+                    if not partes:
+                        continue
+                        
+                    # Detección ultra-segura del "Order History" (evita el list index out of range)
+                    if len(partes) >= 7 and partes[6] in ['BUY', 'SELL', 'Buy', 'Sell']:
                         es_order_history = True
                         
                     # Lectura correcta del "Historial de Posiciones" (Long/Short)
@@ -45,7 +49,6 @@ def procesar_pdf(path):
                             "Fecha": f"{partes[10]} {partes[11]}" if len(partes) >= 12 else ""
                         })
 
-        # Mensaje amigable si se equivocaron de archivo
         if es_order_history and not filas_datos:
             return jsonify({'error': '¡Este es el Historial de Órdenes! Por favor sube el "Historial de Posiciones" o "PNL Realizado" para ver tus ganancias.'}), 400
 
