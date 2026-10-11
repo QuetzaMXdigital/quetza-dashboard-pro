@@ -1,177 +1,189 @@
 "use client";
-import React, { useState } from 'react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-  PieChart, Pie, Cell 
-} from 'recharts';
 
-export default function Dashboard() {
-  const [datos, setDatos] = useState<any>(null);
-  const [cargando, setCargando] = useState(false);
+import { useState } from "react";
+import { UploadCloud, FileText, AlertCircle, TrendingUp, DollarSign, Activity } from "lucide-react";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
-  const subirPDF = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+export default function QuetzaDashboard() {
+  const [file, setFile] = useState<File | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [dashboardData, setDashboardData] = useState<any>(null);
 
-    setCargando(true);
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      // Ruta relativa para que funcione en Vercel
-      const response = await fetch('/api/index', {
-        method: 'POST',
-        body: formData,
-      });
-      
-      const data = await response.json();
-      if (data.status === 'success') {
-        // Pre-procesar datos para las gráficas
-        let acumulado = 0;
-        const historialGrafica = data.historial.map((trade: any, index: number) => {
-          acumulado += trade.Cierre_PNL;
-          return {
-            trade: `T${index + 1}`,
-            pnl: trade.Cierre_PNL,
-            acumulado: acumulado
-          };
-        });
-        
-        setDatos({ ...data, historialGrafica });
-      } else {
-        alert(data.error || "Error al procesar el archivo");
-      }
-    } catch (error) {
-      alert("Error conectando con el servidor backend.");
-    } finally {
-      setCargando(false);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      setError("");
     }
   };
 
-  // Colores QuetzaMX
-  const COLORS = ['#008B8B', '#DAA520'];
+  const processFile = async () => {
+    if (!file) {
+      setError("Por favor, selecciona un archivo PDF de Binance.");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      // 1. Apuntamos a la ruta exacta definida en tu backend de Python
+      const response = await fetch("/api/index", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
+        throw new Error(data.error || "Error al comunicarse con el servidor.");
+      }
+
+      // 2. Transformamos el "historial" de Python en datos para la gráfica (Acumulado)
+      let cumulativePnl = 0;
+      // Invertimos el arreglo porque los PDFs de Binance suelen poner lo más reciente arriba
+      const reversedHistorial = [...data.historial].reverse(); 
+      
+      const chartData = reversedHistorial.map((trade: any, index: number) => {
+        cumulativePnl += Number(trade.Cierre_PNL) || 0;
+        return {
+          date: trade.Fecha || `Trade ${index + 1}`,
+          pnl: parseFloat(cumulativePnl.toFixed(2))
+        };
+      });
+
+      // 3. Emparejamos los datos con la estructura "metricas" de tu Python
+      setDashboardData({
+        total_pnl: data.metricas.pnl_total_usdt,
+        win_rate: data.metricas.win_rate_porcentaje,
+        total_trades: data.metricas.total_trades,
+        chart_data: chartData
+      });
+
+    } catch (err: any) {
+      setError(err.message || "Ocurrió un error inesperado al procesar el PDF.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-[#121212] text-white p-4 md:p-8 font-sans">
-      <header className="flex flex-col md:flex-row justify-between items-center mb-10 border-b border-[#2A2A2A] pb-4">
-        <h1 className="text-3xl font-bold tracking-wider mb-4 md:mb-0">
-          <span className="text-[#DAA520]">QUETZA</span>
-          <span className="text-[#008B8B]">MX</span> ANALYTICS
-        </h1>
-        
-        <div className="relative overflow-hidden inline-block">
-          <button className="bg-[#008B8B] hover:bg-[#007070] text-white px-6 py-2 rounded-md font-semibold transition-all">
-            {cargando ? 'Procesando...' : '+ Subir PDF Binance'}
-          </button>
-          <input 
-            type="file" 
-            accept=".pdf"
-            onChange={subirPDF}
-            className="absolute top-0 left-0 opacity-0 w-full h-full cursor-pointer"
-          />
+    <div className="min-h-screen bg-gray-950 text-gray-100 p-8 font-sans">
+      <header className="mb-10 flex items-center justify-between border-b border-gray-800 pb-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight text-white flex items-center gap-3">
+            <Activity className="text-cyan-400" size={32} />
+            QUETZA ANALYTICS
+          </h1>
+          <p className="text-gray-400 mt-1">Análisis avanzado de Historial de Posiciones</p>
         </div>
       </header>
 
-      {!datos && !cargando && (
-        <div className="flex justify-center items-center h-64 border-2 border-dashed border-[#2A2A2A] rounded-xl">
-          <p className="text-gray-500">Sube tu reporte de Historial de Posiciones de Binance para comenzar</p>
-        </div>
-      )}
+      <main className="max-w-6xl mx-auto space-y-8">
+        {!dashboardData && (
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 flex flex-col items-center justify-center text-center shadow-xl">
+            <div className="bg-gray-800 p-4 rounded-full mb-4">
+              <UploadCloud size={48} className="text-cyan-400" />
+            </div>
+            <h2 className="text-xl font-semibold mb-2">Sube tu reporte de Binance</h2>
+            <p className="text-gray-400 mb-8 max-w-md">
+              Selecciona tu archivo PDF con el historial de futuros. Nuestro motor de Python extraerá y analizará tus operaciones.
+            </p>
+            
+            <div className="flex flex-col items-center gap-4 w-full max-w-sm">
+              <label className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-white py-3 px-4 rounded-xl cursor-pointer transition-all">
+                <FileText size={20} />
+                <span className="truncate">{file ? file.name : "Seleccionar archivo PDF"}</span>
+                <input type="file" accept=".pdf" className="hidden" onChange={handleFileChange} />
+              </label>
 
-      {cargando && (
-        <div className="flex justify-center items-center h-64">
-          <p className="text-[#008B8B] animate-pulse font-semibold">Analizando operaciones...</p>
-        </div>
-      )}
-
-      {datos && (
-        <>
-          {/* Métricas Principales */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
-            <div className="bg-[#1E1E24] p-6 rounded-xl border border-[#008B8B]/30 shadow-[0_0_15px_rgba(0,139,139,0.15)] flex flex-col justify-center items-center">
-              <h2 className="text-gray-400 text-lg mb-2">Win Rate</h2>
-              <span className="text-6xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#008B8B] to-[#00BFFF]">
-                {datos.metricas.win_rate_porcentaje}%
-              </span>
+              <button
+                onClick={processFile}
+                disabled={loading || !file}
+                className={`w-full py-3 rounded-xl font-semibold transition-all flex justify-center items-center gap-2
+                  ${loading || !file ? 'bg-cyan-900/50 text-cyan-200/50 cursor-not-allowed' : 'bg-cyan-500 hover:bg-cyan-400 text-gray-950 shadow-[0_0_15px_rgba(6,182,212,0.4)]'}`}
+              >
+                {loading ? (
+                  <span className="animate-pulse">Analizando PDF...</span>
+                ) : (
+                  "Generar Dashboard"
+                )}
+              </button>
             </div>
 
-            <div className="bg-[#1E1E24] p-6 rounded-xl border border-[#2A2A2A] flex flex-col justify-center items-center">
-              <h2 className="text-gray-400 text-lg mb-2">Profit Neto</h2>
-              <span className={`text-4xl font-bold ${datos.metricas.pnl_total_usdt > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {datos.metricas.pnl_total_usdt > 0 ? '+' : ''}${datos.metricas.pnl_total_usdt}
-              </span>
-            </div>
-
-            <div className="bg-[#1E1E24] p-6 rounded-xl border border-[#2A2A2A] flex flex-col justify-center items-center">
-              <h2 className="text-gray-400 text-lg mb-2">Total de Trades</h2>
-              <span className="text-4xl font-bold text-white">
-                {datos.metricas.total_trades}
-              </span>
-            </div>
+            {error && (
+              <div className="mt-6 flex items-center gap-2 text-red-400 bg-red-400/10 py-2 px-4 rounded-lg border border-red-400/20">
+                <AlertCircle size={18} />
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
           </div>
+        )}
 
-          {/* Gráfica de Curva de Capital */}
-          <div className="bg-[#1E1E24] p-6 rounded-xl border border-[#2A2A2A] h-[450px] mb-10">
-            <h3 className="text-xl font-semibold text-gray-200 mb-6">Curva de Capital (PnL Acumulado)</h3>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={datos.historialGrafica} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#008B8B" stopOpacity={0.6}/>
-                    <stop offset="95%" stopColor="#008B8B" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2A2A2A" vertical={false} />
-                <XAxis dataKey="trade" stroke="#666" tick={{fill: '#888'}} axisLine={false} tickLine={false} />
-                <YAxis stroke="#666" tick={{fill: '#888'}} axisLine={false} tickLine={false} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1E1E24', borderColor: '#DAA520', borderRadius: '8px' }}
-                  itemStyle={{ color: '#00BFFF', fontWeight: 'bold' }}
-                />
-                <ReferenceLine y={0} stroke="#DAA520" strokeDasharray="3 3" opacity={0.5} />
-                <Area type="monotone" dataKey="acumulado" stroke="#00BFFF" strokeWidth={3} fill="url(#colorPnL)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+        {dashboardData && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 text-gray-400 mb-2">
+                  <DollarSign size={20} className="text-emerald-400" />
+                  <h3 className="font-medium">PnL Total</h3>
+                </div>
+                <p className={`text-4xl font-bold ${dashboardData.total_pnl >= 0 ? 'text-white' : 'text-red-400'}`}>
+                  $ {dashboardData.total_pnl}
+                </p>
+              </div>
+              
+              <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 text-gray-400 mb-2">
+                  <TrendingUp size={20} className="text-cyan-400" />
+                  <h3 className="font-medium">Win Rate</h3>
+                </div>
+                <p className="text-4xl font-bold text-white">{dashboardData.win_rate} %</p>
+              </div>
 
-          {/* Tabla de Historial */}
-          <div className="bg-[#1E1E24] p-6 rounded-xl border border-[#2A2A2A] overflow-hidden">
-            <h3 className="text-xl font-semibold text-gray-200 mb-6">Historial de Operaciones</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse min-w-[600px]">
-                <thead>
-                  <tr className="border-b border-[#3A3A3A] text-gray-400 text-sm uppercase tracking-wider">
-                    <th className="py-4 px-4 font-medium">Fecha</th>
-                    <th className="py-4 px-4 font-medium">Par</th>
-                    <th className="py-4 px-4 font-medium">Lado</th>
-                    <th className="py-4 px-4 font-medium text-right">Entrada</th>
-                    <th className="py-4 px-4 font-medium text-right">Cierre</th>
-                    <th className="py-4 px-4 font-medium text-right">PnL</th>
-                  </tr>
-                </thead>
-                <tbody className="text-gray-200 text-sm">
-                  {datos.historial.map((trade: any, index: number) => (
-                    <tr key={index} className={`border-b border-[#2A2A2A] hover:bg-[#2A2A30] ${index % 2 === 0 ? 'bg-[#1E1E24]' : 'bg-[#18181D]'}`}>
-                      <td className="py-3 px-4">{trade.Fecha}</td>
-                      <td className="py-3 px-4 font-semibold text-white">{trade.Símbolo}</td>
-                      <td className="py-3 px-4">
-                        <span className={`px-2 py-1 rounded text-xs font-bold ${trade.Lado === 'Long' ? 'bg-[#008B8B]/20 text-[#008B8B]' : 'bg-[#DAA520]/20 text-[#DAA520]'}`}>
-                          {trade.Lado}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right">${trade.Precio_Entrada}</td>
-                      <td className="py-3 px-4 text-right">${trade.Precio_Cierre}</td>
-                      <td className={`py-3 px-4 text-right font-bold ${trade.Cierre_PNL > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {trade.Cierre_PNL > 0 ? '+' : ''}{trade.Cierre_PNL}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg">
+                <div className="flex items-center gap-3 text-gray-400 mb-2">
+                  <Activity size={20} className="text-purple-400" />
+                  <h3 className="font-medium">Total de Trades</h3>
+                </div>
+                <p className="text-4xl font-bold text-white">{dashboardData.total_trades}</p>
+              </div>
             </div>
+
+            <div className="bg-gray-900 border border-gray-800 p-6 rounded-2xl shadow-lg h-96">
+              <h3 className="font-medium text-gray-400 mb-6">Curva de Rendimiento (PnL Acumulado)</h3>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={dashboardData.chart_data}>
+                  <defs>
+                    <linearGradient id="colorPnL" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22d3ee" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#22d3ee" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                  <XAxis dataKey="date" stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} minTickGap={30} />
+                  <YAxis stroke="#9ca3af" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => `$${value}`} />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px', color: '#fff' }}
+                    itemStyle={{ color: '#22d3ee' }}
+                  />
+                  <Area type="monotone" dataKey="pnl" stroke="#22d3ee" strokeWidth={3} fillOpacity={1} fill="url(#colorPnL)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+            
+            <button 
+              onClick={() => setDashboardData(null)}
+              className="mt-8 text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors"
+            >
+              ← Analizar otro documento
+            </button>
           </div>
-        </>
-      )}
+        )}
+      </main>
     </div>
   );
 }
