@@ -88,7 +88,7 @@ export default function QuetzaDashboard() {
   }, []);
 
   const setCampo = (id: string, campo: keyof Entrada, valor: string) => {
-    const nuevo = { ...diario, [id]: { btc: "", reglas: "", ...diario[id], [campo]: valor } };
+    const nuevo = { ...diario, [id]: { ...(diario[id] || { btc: "", reglas: "" }), [campo]: valor } };
     setDiario(nuevo);
     try { localStorage.setItem(LS_KEY, JSON.stringify(nuevo)); } catch {}
   };
